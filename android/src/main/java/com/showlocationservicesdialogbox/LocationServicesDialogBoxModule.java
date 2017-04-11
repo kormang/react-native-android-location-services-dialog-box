@@ -30,11 +30,18 @@ class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule impleme
     }
 
     @ReactMethod
-    public void checkLocationServicesIsEnabled(ReadableMap configMap, Promise promise) {
+    public void checkLocationServicesIsEnabledWithPrompt(ReadableMap configMap, Promise promise) {
         promiseCallback = promise;
         map = configMap;
         currentActivity = getCurrentActivity();
         checkLocationService(false);
+    }
+
+    @ReactMethod
+    public void checkLocationServiceIsEnabled(Promise promise) {
+        promiseCallback = promise;
+        currentActivity = getCurrentActivity();
+        checkLocationService(true);
     }
 
     private void checkLocationService(Boolean activityResult) {
