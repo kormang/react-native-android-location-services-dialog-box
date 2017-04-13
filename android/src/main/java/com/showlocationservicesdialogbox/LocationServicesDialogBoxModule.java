@@ -7,6 +7,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.location.LocationManager;
 import android.text.Html;
+
 import com.facebook.react.bridge.*;
 
 class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule implements ActivityEventListener {
@@ -44,19 +45,29 @@ class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule impleme
         checkLocationService(true);
     }
 
+    @ReactMethod
+    public void openSettings() {
+        final String action = android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS;
+        currentActivity = getCurrentActivity();
+        currentActivity.startActivityForResult(new Intent(action), ENABLE_LOCATION_SERVICES);
+    }
+
     private void checkLocationService(Boolean activityResult) {
         // Robustness check
-        if (currentActivity == null || map == null || promiseCallback == null) return;
+        if (currentActivity == null || promiseCallback == null || (!activityResult && map == null)) return;
         LocationManager locationManager = (LocationManager) currentActivity.getSystemService(Context.LOCATION_SERVICE);
 
-        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || !locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+        System.out.println("GPS_PROVIDER " + locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER));
+        System.out.println("NETWORK_PROVIDER " + locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER));
+        if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+            promiseCallback.resolve("enabled");
+
+        } else {
             if (activityResult) {
-                promiseCallback.reject(new Throwable("disabled"));
+                promiseCallback.resolve("disabled");
             } else {
                 displayPromptForEnablingGPS(currentActivity, map, promiseCallback);
             }
-        } else {
-            promiseCallback.resolve("enabled");
         }
     }
 
@@ -84,9 +95,8 @@ class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule impleme
 
     @Override
     public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
-        if(requestCode == ENABLE_LOCATION_SERVICES) {
+        if (requestCode == ENABLE_LOCATION_SERVICES) {
             currentActivity = activity;
-            checkLocationService(true);
         }
     }
 }
