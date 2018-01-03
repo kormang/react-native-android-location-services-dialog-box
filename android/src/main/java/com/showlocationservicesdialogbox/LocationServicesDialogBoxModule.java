@@ -7,7 +7,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.location.LocationManager;
 import android.text.Html;
-
+import android.text.Spanned;
 import com.facebook.react.bridge.*;
 
 class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule implements ActivityEventListener {
@@ -15,6 +15,7 @@ class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule impleme
     private ReadableMap map;
     private Activity currentActivity;
     private static final int ENABLE_LOCATION_SERVICES = 1009;
+    private static AlertDialog alertDialog;
 
     LocationServicesDialogBoxModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -30,19 +31,14 @@ class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule impleme
         return "LocationServicesDialogBox";
     }
 
+
+
     @ReactMethod
-    public void checkLocationServicesIsEnabledWithPrompt(ReadableMap configMap, Promise promise) {
+    public void checkLocationServicesIsEnabled(ReadableMap configMap, Promise promise) {
         promiseCallback = promise;
         map = configMap;
         currentActivity = getCurrentActivity();
         checkLocationService(false);
-    }
-
-    @ReactMethod
-    public void checkLocationServiceIsEnabled(Promise promise) {
-        promiseCallback = promise;
-        currentActivity = getCurrentActivity();
-        checkLocationService(true);
     }
 
     @ReactMethod
@@ -52,34 +48,60 @@ class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule impleme
         currentActivity.startActivityForResult(new Intent(action), ENABLE_LOCATION_SERVICES);
     }
 
+    public void forceCloseDialog() {
+        if (alertDialog != null) {
+            promiseCallback.reject(new Throwable("disabled"));
+            alertDialog.cancel();
+        }
+    }
+
     private void checkLocationService(Boolean activityResult) {
         // Robustness check
-        if (currentActivity == null || promiseCallback == null || (!activityResult && map == null)) return;
+        if (currentActivity == null || map == null || promiseCallback == null) return;
         LocationManager locationManager = (LocationManager) currentActivity.getSystemService(Context.LOCATION_SERVICE);
+        WritableMap result = Arguments.createMap();
 
-        System.out.println("GPS_PROVIDER " + locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER));
-        System.out.println("NETWORK_PROVIDER " + locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER));
-        if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-            promiseCallback.resolve("enabled");
-
+        Boolean isEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+        if (map.hasKey("enableHighAccuracy") && map.getBoolean("enableHighAccuracy")) {
+            // High accuracy needed. Require NETWORK_PROVIDER.
+            isEnabled = isEnabled && locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
         } else {
-            if (activityResult) {
-                promiseCallback.resolve("disabled");
-            } else {
+            // Either highAccuracy is not a must which means any location will suffice
+            // or it is not specified which means again that any location will do.
+            isEnabled = isEnabled || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+        }
+
+        if (!isEnabled) {
+            if (activityResult || map.hasKey("openLocationServices") && !map.getBoolean("openLocationServices")) {
+                promiseCallback.reject(new Throwable("disabled"));
+            } else if (!map.hasKey("showDialog") || map.getBoolean("showDialog")) {
                 displayPromptForEnablingGPS(currentActivity, map, promiseCallback);
+            } else {
+                newActivity(currentActivity);
             }
+        } else {
+            result.putString("status", "enabled");
+            result.putBoolean("enabled", true);
+            result.putBoolean("alreadyEnabled", !activityResult);
+
+            promiseCallback.resolve(result);
         }
     }
 
     private static void displayPromptForEnablingGPS(final Activity activity, final ReadableMap configMap, final Promise promise) {
         final AlertDialog.Builder builder = new AlertDialog.Builder(activity);
-        final String action = android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS;
 
-        builder.setMessage(Html.fromHtml(configMap.getString("message")))
+        final Spanned message = (
+                android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ?
+                        Html.fromHtml(configMap.getString("message"), Html.FROM_HTML_MODE_LEGACY) :
+                        Html.fromHtml(configMap.getString("message"))
+        );
+
+        builder.setMessage(message)
                 .setPositiveButton(configMap.getString("ok"),
                         new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialogInterface, int id) {
-                                activity.startActivityForResult(new Intent(action), ENABLE_LOCATION_SERVICES);
+                                newActivity(activity);
                                 dialogInterface.dismiss();
                             }
                         })
@@ -90,7 +112,23 @@ class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule impleme
                                 dialogInterface.cancel();
                             }
                         });
-        builder.create().show();
+
+        alertDialog = builder.create();
+
+        if (!configMap.hasKey("preventOutSideTouch") || configMap.getBoolean("preventOutSideTouch")) {
+            alertDialog.setCanceledOnTouchOutside(false);
+        }
+
+        if (!configMap.hasKey("preventBackClick") || configMap.getBoolean("preventBackClick")) {
+            alertDialog.setCancelable(false);
+        }
+
+        alertDialog.show();
+    }
+
+    private static void newActivity(final Activity activity) {
+        final String action = android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS;
+        activity.startActivityForResult(new Intent(action), ENABLE_LOCATION_SERVICES);
     }
 
     @Override
