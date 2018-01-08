@@ -31,8 +31,6 @@ class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule impleme
         return "LocationServicesDialogBox";
     }
 
-
-
     @ReactMethod
     public void checkLocationServicesIsEnabled(ReadableMap configMap, Promise promise) {
         promiseCallback = promise;
@@ -135,6 +133,7 @@ class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule impleme
     public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
         if (requestCode == ENABLE_LOCATION_SERVICES) {
             currentActivity = activity;
+            checkLocationService(true);
         }
     }
 }
