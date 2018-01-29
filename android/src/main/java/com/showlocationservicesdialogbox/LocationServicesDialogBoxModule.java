@@ -43,7 +43,7 @@ class LocationServicesDialogBoxModule extends ReactContextBaseJavaModule impleme
     public void openSettings() {
         final String action = android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS;
         currentActivity = getCurrentActivity();
-        currentActivity.startActivityForResult(new Intent(action), ENABLE_LOCATION_SERVICES);
+        currentActivity.startActivity(new Intent(action));
     }
 
     public void forceCloseDialog() {
